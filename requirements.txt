@@ -1,0 +1,15 @@
+
+langchain
+langgraph
+langchain-community
+langchain-ollama
+chromadb
+sentence-transformers
+fastapi
+uvicorn
+streamlit
+pypdf
+python-dotenv
+pydantic
+pytest
+httpx
