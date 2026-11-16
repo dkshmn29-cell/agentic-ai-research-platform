@@ -1,12 +1,34 @@
-# Agentic AI Research & Intelligence Platform
+# Agentic AI Research Platform
 
-A local-first research assistant for turning source documents into evidence-traceable reports.
+A local-first PDF research assistant. It extracts and indexes PDF text, retrieves relevant passages, and answers questions with page-level citations using a locally running Ollama model.
 
-`data/raw/sample_banking_genai_research.pdf` is synthetic test data. Its organizations and examples are fictional; it is not evidence about real banks or the banking industry. Regenerate it with `python scripts/create_synthetic_sample_pdf.py`.
+## What it does
+
+- Extracts text from PDFs and splits it into overlapping chunks while retaining source and page metadata.
+- Embeds chunks with Sentence Transformers and stores them in a persistent local ChromaDB collection.
+- Retrieves relevant passages, optionally prioritizing distinct pages.
+- Generates concise answers from retrieved evidence with validated inline citations; abstains when no evidence is available.
+- Provides a Streamlit chat interface for uploading, indexing, and asking questions about selected PDFs.
+- Evaluates retrieval ranking using labeled PDF pages and Hit@k, Recall@k, and MRR.
+
+The PDF, embedding model, vector database, and Ollama model run locally. Sentence Transformers may download its model from Hugging Face on first use unless a local model directory is provided. Scanned PDFs without an OCR text layer are not supported.
+
+## Requirements
+
+- Python 3.11 or newer
+- Ollama for generated answers and chatbot use
 
 ## Setup
 
-Use Python 3.11 or newer.
+Create and activate a virtual environment, then install dependencies.
+
+macOS/Linux:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
 
 Windows PowerShell:
 
@@ -16,120 +38,85 @@ py -3.11 -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-macOS or Linux:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-```
-
-## Verify
-
-```bash
-python -m pytest -q
-```
-
-## Inspect a PDF
-
-Inspect extraction and chunks without loading an embedding model:
-
-```powershell
-python main.py inspect data/raw/sample_banking_genai_research.pdf --chunk-size 250 --chunk-overlap 50
-```
-
-## Index and search
-
-Index the synthetic fixture locally:
-
-```powershell
-python main.py index data/raw/sample_banking_genai_research.pdf
-```
-
-Search the indexed chunks and display the source page for each result:
-
-```powershell
-python main.py search "What should employees verify before relying on an answer?"
-```
-
-Add `--diversify-pages` to prefer one result per source page before returning additional chunks from the same page:
-
-```powershell
-python main.py search "What should employees verify before relying on an answer?" --diversify-pages
-```
-
-The first `index`, `search`, or `ask` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git. CLI re-indexing updates matching chunk IDs but does not yet remove stale chunks if a source PDF changes. Scanned PDFs are not supported yet because they require OCR.
-
-### Transfer the model from a connected computer
-
-On a computer that can access Hugging Face, from the project directory, download the model files:
-
-```powershell
-python -m pip install huggingface_hub
-python scripts/download_embedding_model.py
-```
-
-Copy the resulting `models/all-MiniLM-L6-v2/` directory to the same relative path in this project on the offline computer. The `models/` directory is intentionally ignored by Git because model weights are large. Then index and search using that local path:
-
-```powershell
-$env:HF_HUB_OFFLINE = "1"
-python main.py index data/raw/sample_banking_genai_research.pdf --embedding-model models/all-MiniLM-L6-v2
-python main.py search "What should employees verify before relying on an answer?" --embedding-model models/all-MiniLM-L6-v2
-```
-
-The model files are read locally; the offline environment does not need Hugging Face access.
-
-## Ask questions with cited answers
-
-Install and start [Ollama](https://ollama.com/), then download the default local chat model:
+Install Ollama from [ollama.com](https://ollama.com/), start it, and download the default chat model:
 
 ```bash
 ollama pull llama3.2:3b
 ```
 
-Ask a question against the indexed evidence:
+## Run the chatbot
 
-```bash
-python main.py ask "What should employees verify before relying on an answer?" \
-  --embedding-model models/all-MiniLM-L6-v2
-```
-
-The command retrieves page-diversified evidence, asks Ollama to answer only from those passages, and prints inline citations with only the cited source pages. Citation references are checked against retrieved pages; if Ollama provides valid source references without inline markers, the command adds those markers to the answer. It returns an explicit insufficient-evidence response when no chunks are indexed. To use another Ollama model or API host, pass `--ollama-model` or `--ollama-url`. The embedding model and the Ollama chat model are separate.
-
-## Chatbot
-
-Start the local web app from the project directory:
+From the project directory:
 
 ```bash
 streamlit run streamlit_app.py
 ```
 
-In the sidebar, upload one or more PDFs and choose **Index selected PDFs**. The app stores uploaded source files under `data/raw/` and their vectors in the local Chroma database. Re-indexing a PDF from the UI replaces older chunks for the same filename. Chat answers search only the selected PDFs (or the PDFs most recently indexed in the current session), and include inline citations and expandable source-page details. The first run may download the embedding model. Ollama must be running with the selected chat model available. The app defaults to the local `models/all-MiniLM-L6-v2` directory when present; otherwise it uses the Hugging Face model ID. The selected embedding model must match the one used by the existing Chroma collection.
+Upload one or more PDFs in the sidebar and select **Index selected PDFs**. Ask questions in the chat; retrieval is restricted to the selected PDFs, and answers include inline citations and expandable source-page details. Re-indexing a PDF from the interface replaces its existing chunks for that filename. Ollama must be running with the selected model available.
+
+## Command-line usage
+
+Inspect extraction and chunking without loading an embedding model:
+
+```bash
+python main.py inspect data/raw/sample_banking_genai_research.pdf
+```
+
+Index a PDF:
+
+```bash
+python main.py index path/to/document.pdf
+```
+
+Search indexed passages:
+
+```bash
+python main.py search "What should employees verify before relying on an answer?" --diversify-pages
+```
+
+Generate a cited answer with Ollama:
+
+```bash
+python main.py ask "What should employees verify before relying on an answer?"
+```
+
+The first indexing, search, or answer command downloads the default embedding model (`sentence-transformers/all-MiniLM-L6-v2`) if it is not already available. ChromaDB persists its index in `chroma_db/`. Use the same `--embedding-model` value for indexing and subsequent searches or answers. A local model directory can be passed with `--embedding-model path/to/model`.
+
+The CLI index command upserts chunks; if a PDF changes, old chunks that are no longer present may remain in the index. The chatbot uploader replaces stale chunks when re-indexing the same filename.
 
 ## Evaluate retrieval
 
-After indexing the sample PDF, evaluate the top three results against the labeled pages:
+Index the sample PDF, then run the labeled retrieval evaluation:
 
-```powershell
-python main.py evaluate --embedding-model models/all-MiniLM-L6-v2 --k 3
+```bash
+python main.py index data/raw/sample_banking_genai_research.pdf
+python main.py evaluate --k 3 --diversify-pages
 ```
 
-Add `--diversify-pages` to evaluate page-diversified retrieval:
+The report includes Hit@k (whether any relevant page was retrieved), Recall@k (coverage of labeled source-page pairs), and MRR (rank of the first relevant page). The bundled evaluation set is a small synthetic wiring check, not a representative benchmark; it measures retrieval ranking, not answer faithfulness.
 
-```powershell
-python main.py evaluate --embedding-model models/all-MiniLM-L6-v2 --k 3 --diversify-pages
+## Tests
+
+```bash
+python -m pytest -q
 ```
 
-`Hit@k` is the share of questions with at least one labeled relevant page in the top `k`. `Recall@k` is the average share of each question's unique labeled source-page pairs found in the top `k`, so repeated chunks from one page do not inflate coverage. The per-case output includes page recall. `MRR` (mean reciprocal rank) rewards relevant pages appearing earlier. Page diversification is opt-in and fetches additional candidates as needed. This small, synthetic dataset is a wiring check, not a representative benchmark. It evaluates page ranking only; it does not measure answer faithfulness or whether the system abstains when evidence is absent.
+## Project layout
 
-`--chunk-size`, `--chunk-overlap`, `--persist-directory`, `--collection-name`, and `--embedding-model` can be used to adjust the pipeline. Other raw and processed data remain excluded from Git by default.
+```text
+app/
+  frontend/   Streamlit chatbot and PDF upload ingestion
+  rag/        PDF extraction, chunking, embeddings, retrieval, generation, evaluation
+data/
+  raw/        Source PDFs, including the synthetic sample
+chroma_db/    Persistent local vector index (created at runtime)
+main.py       CLI entry point
+streamlit_app.py
+tests/        Unit and integration tests
+```
 
-## Dependencies
+`data/raw/sample_banking_genai_research.pdf` is synthetic test data. Its organizations and examples are fictional and should not be treated as evidence about real banks or the banking industry. Regenerate it with:
 
-- PyPDF extracts text from PDFs.
-- LangChain text splitters provide recursive, character-based splitting.
-- Sentence Transformers creates local text embeddings.
-- ChromaDB stores embeddings and source/page metadata persistently.
-- Streamlit provides the local research chatbot interface.
-- pytest runs the tests.
-- ReportLab generates the synthetic sample and deterministic test PDFs.
+```bash
+python scripts/create_synthetic_sample_pdf.py
+```
