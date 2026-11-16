@@ -53,6 +53,21 @@ class ChromaVectorStore:
     def count(self) -> int:
         return self._collection.count()
 
+    def count_for_source(self, source: str) -> int:
+        if not source.strip():
+            raise ValueError("source cannot be empty.")
+        return self.count_for_sources([source])
+
+    def count_for_sources(self, sources: Sequence[str]) -> int:
+        normalized_sources = _normalize_sources(sources)
+        if not normalized_sources:
+            return 0
+        result = self._collection.get(
+            where=_source_filter(normalized_sources),
+            include=[],
+        )
+        return len(result["ids"])
+
     def upsert_chunks(
         self,
         chunks: Sequence[TextChunk],
@@ -115,20 +130,34 @@ class ChromaVectorStore:
         embedding: Sequence[float],
         *,
         n_results: int = 5,
+        sources: Sequence[str] | None = None,
     ) -> list[SearchResult]:
         if n_results <= 0:
             raise ValueError("n_results must be greater than zero.")
 
+        normalized_sources = (
+            _normalize_sources(sources) if sources is not None else None
+        )
+        if normalized_sources == []:
+            return []
+
         query_embedding = _validate_embeddings([embedding])[0]
-        collection_count = self.count()
+        collection_count = (
+            self.count_for_sources(normalized_sources)
+            if normalized_sources is not None
+            else self.count()
+        )
         if collection_count == 0:
             return []
 
-        result = self._collection.query(
-            query_embeddings=[query_embedding],
-            n_results=min(n_results, collection_count),
-            include=["documents", "metadatas", "distances"],
-        )
+        query_options: dict[str, object] = {
+            "query_embeddings": [query_embedding],
+            "n_results": min(n_results, collection_count),
+            "include": ["documents", "metadatas", "distances"],
+        }
+        if normalized_sources is not None:
+            query_options["where"] = _source_filter(normalized_sources)
+        result = self._collection.query(**query_options)
         ids = result["ids"][0]
         documents = result["documents"]
         metadatas = result["metadatas"]
@@ -172,6 +201,19 @@ class ChromaVectorStore:
             )
 
         return results
+
+
+def _normalize_sources(sources: Sequence[str]) -> list[str]:
+    normalized_sources = list(dict.fromkeys(sources))
+    if any(not source.strip() for source in normalized_sources):
+        raise ValueError("sources cannot contain an empty source.")
+    return normalized_sources
+
+
+def _source_filter(sources: Sequence[str]) -> dict[str, object]:
+    if len(sources) == 1:
+        return {"source": sources[0]}
+    return {"source": {"$in": list(sources)}}
 
 
 def _validate_embeddings(

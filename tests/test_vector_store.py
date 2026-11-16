@@ -10,11 +10,12 @@ def create_chunk(
     chunk_id: str,
     content: str,
     page: int,
+    source: str = "research.pdf",
 ) -> TextChunk:
     return {
         "content": content,
         "metadata": {
-            "source": "research.pdf",
+            "source": source,
             "page": page,
             "chunk_id": chunk_id,
             "chunk_index": 1,
@@ -80,6 +81,33 @@ def test_store_replaces_source_and_removes_stale_chunks(tmp_path: Path) -> None:
     results = store.search_by_embedding([1.0, 0.0], n_results=2)
     assert [result["metadata"]["chunk_id"] for result in results] == ["keep"]
     assert results[0]["content"] == "Updated current text."
+
+
+def test_store_counts_chunks_for_only_the_requested_source(tmp_path: Path) -> None:
+    store = ChromaVectorStore(
+        tmp_path,
+        collection_name="source_count_test",
+        embedding_model="test-model",
+    )
+    chunks = [
+        create_chunk("one", "First document.", 1),
+        create_chunk("two", "First document continued.", 2),
+        create_chunk("three", "Second document.", 1, source="other.pdf"),
+    ]
+    store.upsert_chunks(chunks, [[1.0, 0.0], [0.9, 0.1], [0.0, 1.0]])
+
+    assert store.count() == 3
+    assert store.count_for_source("research.pdf") == 2
+    assert store.count_for_source("other.pdf") == 1
+    assert store.count_for_sources(["research.pdf", "other.pdf"]) == 3
+    assert store.count_for_source("missing.pdf") == 0
+
+
+def test_store_source_count_rejects_empty_source(tmp_path: Path) -> None:
+    store = ChromaVectorStore(tmp_path, embedding_model="test-model")
+
+    with pytest.raises(ValueError, match="source cannot be empty"):
+        store.count_for_source(" ")
 
 
 def test_store_source_replacement_rejects_multiple_sources(tmp_path: Path) -> None:

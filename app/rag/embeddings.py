@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any, Protocol
 
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
@@ -18,6 +19,7 @@ class SentenceTransformerEmbedder:
         *,
         device: str = "cpu",
         batch_size: int = DEFAULT_EMBEDDING_BATCH_SIZE,
+        model_path: str | Path | None = None,
         model: Any | None = None,
     ) -> None:
         if not model_name.strip():
@@ -31,7 +33,7 @@ class SentenceTransformerEmbedder:
         if model is None:
             from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer(model_name, device=device)
+            model = SentenceTransformer(str(model_path or model_name), device=device)
 
         self._model = model
 

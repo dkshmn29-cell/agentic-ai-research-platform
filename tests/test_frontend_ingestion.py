@@ -5,6 +5,11 @@ from pathlib import Path
 import pytest
 from reportlab.pdfgen import canvas
 
+from app.frontend.chatbot import (
+    PROJECT_ROOT,
+    _resolve_embedding_model,
+    _synchronize_chat_scope,
+)
 from app.frontend.ingestion import index_uploaded_pdf
 from app.rag.chunking import TextChunk
 
@@ -33,6 +38,43 @@ def create_pdf() -> bytes:
     pdf.drawString(72, 720, "Employees verify the cited source version and date.")
     pdf.save()
     return buffer.getvalue()
+
+
+def test_embedding_model_paths_resolve_to_collection_compatible_identity() -> None:
+    relative = "models/all-MiniLM-L6-v2"
+    absolute = str(PROJECT_ROOT / relative)
+
+    relative_config = _resolve_embedding_model(relative)
+    absolute_config = _resolve_embedding_model(absolute)
+
+    assert relative_config == (relative, absolute)
+    assert absolute_config == relative_config
+
+
+def test_chat_scope_change_clears_previous_answers() -> None:
+    session_state: dict[str, object] = {
+        "chat_source_scope": ("old.pdf",),
+        "chat_messages": [{"role": "assistant", "content": "Old answer"}],
+    }
+
+    had_history = _synchronize_chat_scope(session_state, ["new.pdf"])
+
+    assert had_history
+    assert session_state["chat_source_scope"] == ("new.pdf",)
+    assert session_state["chat_messages"] == []
+
+
+def test_chat_scope_stays_when_selected_sources_are_unchanged() -> None:
+    messages = [{"role": "assistant", "content": "Current answer"}]
+    session_state: dict[str, object] = {
+        "chat_source_scope": ("guide.pdf",),
+        "chat_messages": messages,
+    }
+
+    had_history = _synchronize_chat_scope(session_state, ["guide.pdf", "guide.pdf"])
+
+    assert not had_history
+    assert session_state["chat_messages"] is messages
 
 
 def test_index_uploaded_pdf_persists_and_indexes_extracted_pages(

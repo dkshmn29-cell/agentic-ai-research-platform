@@ -38,11 +38,16 @@ class RankedTestEmbedder:
         ]
 
 
-def create_chunk(chunk_id: str, content: str, page: int) -> TextChunk:
+def create_chunk(
+    chunk_id: str,
+    content: str,
+    page: int,
+    source: str = "research.pdf",
+) -> TextChunk:
     return {
         "content": content,
         "metadata": {
-            "source": "research.pdf",
+            "source": source,
             "page": page,
             "chunk_id": chunk_id,
             "chunk_index": 1,
@@ -114,3 +119,52 @@ def test_search_can_prioritize_distinct_source_pages(tmp_path: Path) -> None:
 
     assert [result["metadata"]["page"] for result in ordinary_results] == [1, 1]
     assert [result["metadata"]["page"] for result in diverse_results] == [1, 2]
+
+
+def test_search_can_be_limited_to_selected_pdf_sources(tmp_path: Path) -> None:
+    retriever = create_retriever(tmp_path)
+    retriever.index(
+        [
+            create_chunk("selected", "Review risks in the selected document.", 1),
+            create_chunk(
+                "other-document",
+                "Review risks in another document.",
+                2,
+                source="other.pdf",
+            ),
+            create_chunk(
+                "excluded-document",
+                "Review risks in an unselected document.",
+                3,
+                source="excluded.pdf",
+            ),
+        ]
+    )
+
+    results = retriever.search(
+        "review risks",
+        n_results=5,
+        diversify_by_page=True,
+        sources=["research.pdf"],
+    )
+
+    assert len(results) == 1
+    assert results[0]["metadata"]["source"] == "research.pdf"
+    assert results[0]["metadata"]["chunk_id"] == "selected"
+
+    results_from_multiple_sources = retriever.search(
+        "review risks",
+        n_results=5,
+        sources=["research.pdf", "other.pdf"],
+    )
+    assert {result["metadata"]["source"] for result in results_from_multiple_sources} == {
+        "research.pdf",
+        "other.pdf",
+    }
+
+
+def test_search_with_no_selected_sources_returns_no_results(tmp_path: Path) -> None:
+    retriever = create_retriever(tmp_path)
+    retriever.index([create_chunk("selected", "Review risks.", 1)])
+
+    assert retriever.search("review risks", sources=[]) == []

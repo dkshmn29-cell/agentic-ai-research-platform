@@ -101,10 +101,10 @@ The command retrieves page-diversified evidence, asks Ollama to answer only from
 Start the local web app from the project directory:
 
 ```bash
-streamlit run app/frontend/chatbot.py
+streamlit run streamlit_app.py
 ```
 
-In the sidebar, upload one or more PDFs and choose **Index selected PDFs**. The app stores uploaded source files under `data/raw/` and their vectors in the local Chroma database. Re-indexing a PDF from the UI replaces older chunks for the same filename. Ask questions in the chat box; answers include inline citations and expandable source-page details. The first run may download the embedding model. Ollama must be running with the selected chat model available. The app defaults to the local `models/all-MiniLM-L6-v2` directory when present; otherwise it uses the Hugging Face model ID. The selected embedding model must match the one used by the existing Chroma collection.
+In the sidebar, upload one or more PDFs and choose **Index selected PDFs**. The app stores uploaded source files under `data/raw/` and their vectors in the local Chroma database. Re-indexing a PDF from the UI replaces older chunks for the same filename. Chat answers search only the selected PDFs (or the PDFs most recently indexed in the current session), and include inline citations and expandable source-page details. The first run may download the embedding model. Ollama must be running with the selected chat model available. The app defaults to the local `models/all-MiniLM-L6-v2` directory when present; otherwise it uses the Hugging Face model ID. The selected embedding model must match the one used by the existing Chroma collection.
 
 ## Evaluate retrieval
 

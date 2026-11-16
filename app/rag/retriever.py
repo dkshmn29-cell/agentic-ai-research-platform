@@ -22,6 +22,12 @@ class ResearchRetriever:
     def count(self) -> int:
         return self._vector_store.count()
 
+    def count_for_source(self, source: str) -> int:
+        return self._vector_store.count_for_source(source)
+
+    def count_for_sources(self, sources: Sequence[str]) -> int:
+        return self._vector_store.count_for_sources(sources)
+
     def index(self, chunks: Sequence[TextChunk]) -> int:
         if not chunks:
             return 0
@@ -48,6 +54,7 @@ class ResearchRetriever:
         *,
         n_results: int = 5,
         diversify_by_page: bool = False,
+        sources: Sequence[str] | None = None,
     ) -> list[SearchResult]:
         normalized_query = query.strip()
         if not normalized_query:
@@ -58,19 +65,30 @@ class ResearchRetriever:
             raise ValueError("The embedder must return one vector for the query.")
 
         if diversify_by_page:
-            return self._search_with_page_diversity(embeddings[0], n_results)
+            return self._search_with_page_diversity(
+                embeddings[0],
+                n_results,
+                sources=sources,
+            )
 
         return self._vector_store.search_by_embedding(
             embeddings[0],
             n_results=n_results,
+            sources=sources,
         )
 
     def _search_with_page_diversity(
         self,
         embedding: list[float],
         n_results: int,
+        *,
+        sources: Sequence[str] | None = None,
     ) -> list[SearchResult]:
-        collection_count = self._vector_store.count()
+        collection_count = (
+            self._vector_store.count_for_sources(sources)
+            if sources is not None
+            else self._vector_store.count()
+        )
         if collection_count == 0:
             return []
 
@@ -79,6 +97,7 @@ class ResearchRetriever:
             candidates = self._vector_store.search_by_embedding(
                 embedding,
                 n_results=candidate_count,
+                sources=sources,
             )
             unique_pages = {
                 (result["metadata"]["source"], result["metadata"]["page"])
