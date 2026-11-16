@@ -83,6 +83,33 @@ class ChromaVectorStore:
         )
         return len(chunks)
 
+    def replace_source_chunks(
+        self,
+        chunks: Sequence[TextChunk],
+        embeddings: Sequence[Sequence[float]],
+    ) -> int:
+        if not chunks:
+            if embeddings:
+                raise ValueError("Each chunk must have exactly one embedding.")
+            return 0
+
+        sources = {chunk["metadata"]["source"] for chunk in chunks}
+        if len(sources) != 1:
+            raise ValueError("Source replacement must contain chunks from one source.")
+        if len(chunks) != len(embeddings):
+            raise ValueError("Each chunk must have exactly one embedding.")
+
+        source = next(iter(sources))
+        existing = self._collection.get(where={"source": source}, include=[])
+        existing_ids = set(existing["ids"])
+        replacement_ids = {chunk["metadata"]["chunk_id"] for chunk in chunks}
+
+        indexed_count = self.upsert_chunks(chunks, embeddings)
+        stale_ids = existing_ids.difference(replacement_ids)
+        if stale_ids:
+            self._collection.delete(ids=sorted(stale_ids))
+        return indexed_count
+
     def search_by_embedding(
         self,
         embedding: Sequence[float],

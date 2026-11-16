@@ -19,6 +19,9 @@ class ResearchRetriever:
         self._embedder = embedder
         self._vector_store = vector_store
 
+    def count(self) -> int:
+        return self._vector_store.count()
+
     def index(self, chunks: Sequence[TextChunk]) -> int:
         if not chunks:
             return 0
@@ -28,6 +31,16 @@ class ResearchRetriever:
             raise ValueError("The embedder must return one vector per chunk.")
 
         return self._vector_store.upsert_chunks(chunks, embeddings)
+
+    def replace_source(self, chunks: Sequence[TextChunk]) -> int:
+        if not chunks:
+            return 0
+
+        embeddings = self._embedder.embed([chunk["content"] for chunk in chunks])
+        if len(embeddings) != len(chunks):
+            raise ValueError("The embedder must return one vector per chunk.")
+
+        return self._vector_store.replace_source_chunks(chunks, embeddings)
 
     def search(
         self,

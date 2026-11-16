@@ -56,6 +56,49 @@ def test_store_upserts_searches_and_persists_metadata(tmp_path: Path) -> None:
     ]["page"] == 3
 
 
+def test_store_replaces_source_and_removes_stale_chunks(tmp_path: Path) -> None:
+    store = ChromaVectorStore(
+        tmp_path,
+        collection_name="replace_source_test",
+        embedding_model="test-model",
+    )
+    store.upsert_chunks(
+        [
+            create_chunk("keep", "Current text.", 1),
+            create_chunk("stale", "Old text.", 2),
+        ],
+        [[1.0, 0.0], [0.0, 1.0]],
+    )
+
+    replaced = store.replace_source_chunks(
+        [create_chunk("keep", "Updated current text.", 1)],
+        [[1.0, 0.0]],
+    )
+
+    assert replaced == 1
+    assert store.count() == 1
+    results = store.search_by_embedding([1.0, 0.0], n_results=2)
+    assert [result["metadata"]["chunk_id"] for result in results] == ["keep"]
+    assert results[0]["content"] == "Updated current text."
+
+
+def test_store_source_replacement_rejects_multiple_sources(tmp_path: Path) -> None:
+    store = ChromaVectorStore(tmp_path, embedding_model="test-model")
+    chunks = [
+        create_chunk("one", "First.", 1),
+        {
+            **create_chunk("two", "Second.", 1),
+            "metadata": {
+                **create_chunk("two", "Second.", 1)["metadata"],
+                "source": "other.pdf",
+            },
+        },
+    ]
+
+    with pytest.raises(ValueError, match="one source"):
+        store.replace_source_chunks(chunks, [[1.0, 0.0], [0.0, 1.0]])
+
+
 def test_store_handles_empty_index(tmp_path: Path) -> None:
     store = ChromaVectorStore(tmp_path, embedding_model="test-model")
 

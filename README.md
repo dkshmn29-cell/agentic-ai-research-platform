@@ -58,7 +58,7 @@ Add `--diversify-pages` to prefer one result per source page before returning ad
 python main.py search "What should employees verify before relying on an answer?" --diversify-pages
 ```
 
-The first `index` or `search` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git. Re-indexing uses stable chunk IDs and updates matching records; it does not yet remove stale chunks if a source PDF changes. Scanned PDFs are not supported yet because they require OCR.
+The first `index`, `search`, or `ask` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git. CLI re-indexing updates matching chunk IDs but does not yet remove stale chunks if a source PDF changes. Scanned PDFs are not supported yet because they require OCR.
 
 ### Transfer the model from a connected computer
 
@@ -96,6 +96,16 @@ python main.py ask "What should employees verify before relying on an answer?" \
 
 The command retrieves page-diversified evidence, asks Ollama to answer only from those passages, and prints inline citations with only the cited source pages. Citation references are checked against retrieved pages; if Ollama provides valid source references without inline markers, the command adds those markers to the answer. It returns an explicit insufficient-evidence response when no chunks are indexed. To use another Ollama model or API host, pass `--ollama-model` or `--ollama-url`. The embedding model and the Ollama chat model are separate.
 
+## Chatbot
+
+Start the local web app from the project directory:
+
+```bash
+streamlit run app/frontend/chatbot.py
+```
+
+In the sidebar, upload one or more PDFs and choose **Index selected PDFs**. The app stores uploaded source files under `data/raw/` and their vectors in the local Chroma database. Re-indexing a PDF from the UI replaces older chunks for the same filename. Ask questions in the chat box; answers include inline citations and expandable source-page details. The first run may download the embedding model. Ollama must be running with the selected chat model available. The app defaults to the local `models/all-MiniLM-L6-v2` directory when present; otherwise it uses the Hugging Face model ID. The selected embedding model must match the one used by the existing Chroma collection.
+
 ## Evaluate retrieval
 
 After indexing the sample PDF, evaluate the top three results against the labeled pages:
@@ -120,5 +130,6 @@ python main.py evaluate --embedding-model models/all-MiniLM-L6-v2 --k 3 --divers
 - LangChain text splitters provide recursive, character-based splitting.
 - Sentence Transformers creates local text embeddings.
 - ChromaDB stores embeddings and source/page metadata persistently.
+- Streamlit provides the local research chatbot interface.
 - pytest runs the tests.
 - ReportLab generates the synthetic sample and deterministic test PDFs.
