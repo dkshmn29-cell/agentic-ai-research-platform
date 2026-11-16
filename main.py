@@ -1,7 +1,4 @@
-
-def main():
-    print("Welcome to Agentic AI Research Platform!")
-    print("Project environment is ready.")
+from app.rag.cli import main
 
 
 if __name__ == "__main__":
