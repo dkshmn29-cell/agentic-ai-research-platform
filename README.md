@@ -94,7 +94,7 @@ python main.py ask "What should employees verify before relying on an answer?" \
   --embedding-model models/all-MiniLM-L6-v2
 ```
 
-The command retrieves page-diversified evidence, asks Ollama to answer only from those passages, and prints source-page citations. It rejects unknown or missing citations and returns an explicit insufficient-evidence response when no chunks are indexed. To use another Ollama model or API host, pass `--ollama-model` or `--ollama-url`. The embedding model and the Ollama chat model are separate.
+The command retrieves page-diversified evidence, asks Ollama to answer only from those passages, and prints inline citations with only the cited source pages. Citation references are checked against retrieved pages; if Ollama provides valid source references without inline markers, the command adds those markers to the answer. It returns an explicit insufficient-evidence response when no chunks are indexed. To use another Ollama model or API host, pass `--ollama-model` or `--ollama-url`. The embedding model and the Ollama chat model are separate.
 
 ## Evaluate retrieval
 
