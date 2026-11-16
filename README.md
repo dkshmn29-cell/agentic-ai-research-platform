@@ -52,7 +52,13 @@ Search the indexed chunks and display the source page for each result:
 python main.py search "What should employees verify before relying on an answer?"
 ```
 
-The first `index` or `search` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git.
+Add `--diversify-pages` to prefer one result per source page before returning additional chunks from the same page:
+
+```powershell
+python main.py search "What should employees verify before relying on an answer?" --diversify-pages
+```
+
+The first `index` or `search` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git. Re-indexing uses stable chunk IDs and updates matching records; it does not yet remove stale chunks if a source PDF changes. Scanned PDFs are not supported yet because they require OCR.
 
 ### Transfer the model from a connected computer
 
@@ -72,6 +78,39 @@ python main.py search "What should employees verify before relying on an answer?
 ```
 
 The model files are read locally; the offline environment does not need Hugging Face access.
+
+## Ask questions with cited answers
+
+Install and start [Ollama](https://ollama.com/), then download the default local chat model:
+
+```bash
+ollama pull llama3.2:3b
+```
+
+Ask a question against the indexed evidence:
+
+```bash
+python main.py ask "What should employees verify before relying on an answer?" \
+  --embedding-model models/all-MiniLM-L6-v2
+```
+
+The command retrieves page-diversified evidence, asks Ollama to answer only from those passages, and prints source-page citations. It rejects unknown or missing citations and returns an explicit insufficient-evidence response when no chunks are indexed. To use another Ollama model or API host, pass `--ollama-model` or `--ollama-url`. The embedding model and the Ollama chat model are separate.
+
+## Evaluate retrieval
+
+After indexing the sample PDF, evaluate the top three results against the labeled pages:
+
+```powershell
+python main.py evaluate --embedding-model models/all-MiniLM-L6-v2 --k 3
+```
+
+Add `--diversify-pages` to evaluate page-diversified retrieval:
+
+```powershell
+python main.py evaluate --embedding-model models/all-MiniLM-L6-v2 --k 3 --diversify-pages
+```
+
+`Hit@k` is the share of questions with at least one labeled relevant page in the top `k`. `Recall@k` is the average share of each question's unique labeled source-page pairs found in the top `k`, so repeated chunks from one page do not inflate coverage. The per-case output includes page recall. `MRR` (mean reciprocal rank) rewards relevant pages appearing earlier. Page diversification is opt-in and fetches additional candidates as needed. This small, synthetic dataset is a wiring check, not a representative benchmark. It evaluates page ranking only; it does not measure answer faithfulness or whether the system abstains when evidence is absent.
 
 `--chunk-size`, `--chunk-overlap`, `--persist-directory`, `--collection-name`, and `--embedding-model` can be used to adjust the pipeline. Other raw and processed data remain excluded from Git by default.
 

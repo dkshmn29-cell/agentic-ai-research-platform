@@ -1,0 +1,40 @@
+{
+  "dataset": "synthetic_banking_genai",
+  "description": "Fictional questions for testing retrieval against the synthetic PDF only.",
+  "cases": [
+    {
+      "id": "verify-cited-source",
+      "query": "What should employees verify before relying on an answer?",
+      "relevant_pages": [
+        {
+          "source": "sample_banking_genai_research.pdf",
+          "page": 2
+        }
+      ]
+    },
+    {
+      "id": "tracked-risks",
+      "query": "What risks does the fictional project team track?",
+      "relevant_pages": [
+        {
+          "source": "sample_banking_genai_research.pdf",
+          "page": 3
+        }
+      ]
+    },
+    {
+      "id": "pilot-measurements",
+      "query": "What performance results did the fictional pilot report?",
+      "relevant_pages": [
+        {
+          "source": "sample_banking_genai_research.pdf",
+          "page": 1
+        },
+        {
+          "source": "sample_banking_genai_research.pdf",
+          "page": 2
+        }
+      ]
+    }
+  ]
+}

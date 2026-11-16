@@ -22,6 +22,22 @@ class KeywordTestEmbedder:
         return vectors
 
 
+class RankedTestEmbedder:
+    model_name = "ranked-test-model"
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        return [
+            [1.0, 0.0]
+            if text == "query"
+            else {
+                "first chunk": [1.0, 0.0],
+                "second chunk": [0.9, 0.1],
+                "other page": [0.8, 0.2],
+            }[text]
+            for text in texts
+        ]
+
+
 def create_chunk(chunk_id: str, content: str, page: int) -> TextChunk:
     return {
         "content": content,
@@ -72,3 +88,29 @@ def test_retriever_rejects_embedder_store_model_mismatch(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="same model"):
         ResearchRetriever(KeywordTestEmbedder(), store)
+
+
+def test_search_can_prioritize_distinct_source_pages(tmp_path: Path) -> None:
+    embedder = RankedTestEmbedder()
+    store = ChromaVectorStore(
+        tmp_path,
+        collection_name="page_diversity_test",
+        embedding_model=embedder.model_name,
+    )
+    retriever = ResearchRetriever(embedder, store)
+    chunks = [
+        create_chunk("first", "first chunk", 1),
+        create_chunk("second", "second chunk", 1),
+        create_chunk("other", "other page", 2),
+    ]
+    retriever.index(chunks)
+
+    ordinary_results = retriever.search("query", n_results=2)
+    diverse_results = retriever.search(
+        "query",
+        n_results=2,
+        diversify_by_page=True,
+    )
+
+    assert [result["metadata"]["page"] for result in ordinary_results] == [1, 1]
+    assert [result["metadata"]["page"] for result in diverse_results] == [1, 2]

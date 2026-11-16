@@ -11,6 +11,16 @@ from app.rag.embeddings import (
     DEFAULT_EMBEDDING_MODEL,
     SentenceTransformerEmbedder,
 )
+from app.rag.evaluation import (
+    DEFAULT_RETRIEVAL_CASES,
+    evaluate_retrieval,
+    load_retrieval_cases,
+)
+from app.rag.generation import (
+    DEFAULT_OLLAMA_MODEL,
+    DEFAULT_OLLAMA_URL,
+    OllamaAnswerGenerator,
+)
 from app.rag.retriever import ResearchRetriever
 from app.rag.vector_store import (
     DEFAULT_COLLECTION_NAME,
@@ -51,7 +61,65 @@ def build_parser() -> argparse.ArgumentParser:
         default=5,
         help="Maximum results to return (default: %(default)s)",
     )
+    search_parser.add_argument(
+        "--diversify-pages",
+        action="store_true",
+        help="Prefer distinct source pages before returning duplicate-page chunks",
+    )
     _add_vector_store_options(search_parser)
+
+    ask_parser = commands.add_parser(
+        "ask",
+        help="Generate an answer grounded in retrieved passages with citations.",
+    )
+    ask_parser.add_argument("query", help="Question to answer from indexed evidence")
+    ask_parser.add_argument(
+        "--n-results",
+        type=int,
+        default=5,
+        help="Maximum evidence chunks to provide (default: %(default)s)",
+    )
+    ask_parser.add_argument(
+        "--no-diversify-pages",
+        dest="diversify_pages",
+        action="store_false",
+        help="Allow multiple evidence chunks from the same source page",
+    )
+    ask_parser.set_defaults(diversify_pages=True)
+    ask_parser.add_argument(
+        "--ollama-model",
+        default=DEFAULT_OLLAMA_MODEL,
+        help=f"Ollama model name (default: {DEFAULT_OLLAMA_MODEL})",
+    )
+    ask_parser.add_argument(
+        "--ollama-url",
+        default=DEFAULT_OLLAMA_URL,
+        help=f"Ollama API base URL (default: {DEFAULT_OLLAMA_URL})",
+    )
+    _add_vector_store_options(ask_parser)
+
+    evaluation_parser = commands.add_parser(
+        "evaluate",
+        help="Measure retrieval ranking against labeled source pages.",
+    )
+    evaluation_parser.add_argument(
+        "--cases",
+        type=Path,
+        default=DEFAULT_RETRIEVAL_CASES,
+        help="JSON file with retrieval questions and relevant pages",
+    )
+    evaluation_parser.add_argument(
+        "--k",
+        type=int,
+        default=3,
+        help="Number of top results to evaluate (default: %(default)s)",
+    )
+    evaluation_parser.add_argument(
+        "--diversify-pages",
+        action="store_true",
+        help="Prefer distinct source pages before returning duplicate-page chunks",
+    )
+    _add_vector_store_options(evaluation_parser)
 
     return parser
 
@@ -65,8 +133,12 @@ def main() -> None:
             _inspect_pdf(args.pdf_path, args.chunk_size, args.chunk_overlap)
         elif args.command == "index":
             _index_pdf(args)
-        else:
+        elif args.command == "search":
             _search(args)
+        elif args.command == "ask":
+            _ask(args)
+        else:
+            _evaluate(args)
     except (OSError, RuntimeError, ValueError) as error:
         parser.error(str(error))
 
@@ -117,7 +189,11 @@ def _index_pdf(args: argparse.Namespace) -> None:
 
 def _search(args: argparse.Namespace) -> None:
     retriever = _create_retriever(args)
-    results = retriever.search(args.query, n_results=args.n_results)
+    results = retriever.search(
+        args.query,
+        n_results=args.n_results,
+        diversify_by_page=args.diversify_pages,
+    )
     if not results:
         print("No indexed evidence found.")
         return
@@ -130,6 +206,54 @@ def _search(args: argparse.Namespace) -> None:
         )
         print(result["content"])
         print()
+
+
+def _ask(args: argparse.Namespace) -> None:
+    retriever = _create_retriever(args)
+    evidence = retriever.search(
+        args.query,
+        n_results=args.n_results,
+        diversify_by_page=args.diversify_pages,
+    )
+    answer = OllamaAnswerGenerator(
+        args.ollama_model,
+        base_url=args.ollama_url,
+    ).generate(args.query, evidence)
+
+    print(answer["answer"])
+    if answer["citations"]:
+        print("\nSources:")
+        for citation in answer["citations"]:
+            print(
+                f"[{citation['reference']}] {citation['source']}, "
+                f"page {citation['page']} "
+                f"(cosine distance: {citation['distance']:.4f})"
+            )
+
+
+def _evaluate(args: argparse.Namespace) -> None:
+    cases = load_retrieval_cases(args.cases)
+    report = evaluate_retrieval(
+        _create_retriever(args),
+        cases,
+        k=args.k,
+        diversify_by_page=args.diversify_pages,
+    )
+
+    print(f"Hit@{report['k']}: {report['hit_rate_at_k']:.1%}")
+    print(f"Recall@{report['k']}: {report['recall_at_k']:.1%}")
+    print(f"MRR: {report['mean_reciprocal_rank']:.3f}")
+    for case in report["cases"]:
+        rank = case["first_relevant_rank"]
+        rank_text = f"rank {rank}" if rank is not None else "not found"
+        pages = ", ".join(
+            f"{page['source']} p.{page['page']}"
+            for page in case["retrieved_pages"]
+        )
+        print(
+            f"{case['id']}: first relevant page {rank_text}; "
+            f"page recall {case['page_recall']:.1%}; retrieved: {pages}"
+        )
 
 
 def _create_retriever(args: argparse.Namespace) -> ResearchRetriever:
