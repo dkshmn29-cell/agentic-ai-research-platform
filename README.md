@@ -1,10 +1,6 @@
 # Agentic AI Research & Intelligence Platform
 
-A local-first research assistant that will turn a user's source documents into an evidence-traceable report. PDF ingestion and page-aware text chunking are the first completed pipeline steps; retrieval, grounded answers, evaluation, orchestration, and interfaces will be added in sequence.
-
-## Current milestone
-
-The PDF loader validates input files, extracts text page by page, keeps the source filename and original 1-based page number, and skips pages with no extractable text. The chunker splits each page independently, retains source/page metadata, and assigns deterministic IDs. Local embeddings use Sentence Transformers; Chroma persists vectors and citations on disk. Chunk size and overlap are measured in characters, not model tokens; the defaults are starting points to evaluate later. Scanned PDFs are not supported yet because they require OCR.
+A local-first research assistant for turning source documents into evidence-traceable reports.
 
 `data/raw/sample_banking_genai_research.pdf` is synthetic test data. Its organizations and examples are fictional; it is not evidence about real banks or the banking industry. Regenerate it with `python scripts/create_synthetic_sample_pdf.py`.
 
@@ -56,7 +52,7 @@ Search the indexed chunks and display the source page for each result:
 python main.py search "What should employees verify before relying on an answer?"
 ```
 
-The first `index` or `search` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git. Re-indexing uses stable chunk IDs and updates matching records; it does not yet remove stale chunks if a source PDF changes. Scanned PDFs are not supported yet because they require OCR.
+The first `index` or `search` command downloads the configured embedding model (`sentence-transformers/all-MiniLM-L6-v2`) from Hugging Face unless it is already cached. It runs locally on CPU after download. The vector database is stored in `chroma_db/`, which is ignored by Git.
 
 ### Transfer the model from a connected computer
 
@@ -87,5 +83,3 @@ The model files are read locally; the offline environment does not need Hugging 
 - ChromaDB stores embeddings and source/page metadata persistently.
 - pytest runs the tests.
 - ReportLab generates the synthetic sample and deterministic test PDFs.
-
-No generative LLM, paid API, or agent framework is installed at this stage.
